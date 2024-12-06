@@ -41,6 +41,8 @@ public class MossBreaker extends Module {
 
     private BlockPos targetMossPos;
     private long lastBreakTime;
+    private boolean isBreaking = false;
+    private int breakProgress = 0;
 
     @Override
     public void onDeactivate() {
@@ -49,6 +51,8 @@ public class MossBreaker extends Module {
             scheduler = null;
         }
         brokenPositions.clear();
+        isBreaking = false;
+        breakProgress = 0;
         super.onDeactivate();
     }
 
@@ -58,6 +62,8 @@ public class MossBreaker extends Module {
         targetMossPos = null;
         lastBreakTime = 0;
         brokenPositions.clear();
+        isBreaking = false;
+        breakProgress = 0;
 
         scheduler = Executors.newScheduledThreadPool(1);
 
@@ -147,25 +153,37 @@ public class MossBreaker extends Module {
 
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastBreakTime < delay.get() * 1000) return;
-        lastBreakTime = currentTime;
 
-        BlockPos mossPos = findMossBlock();
-        if (mossPos == null) {
-            mc.player.sendMessage(Text.literal("No moss blocks found in range!"), true);
-            return;
+        if (!isBreaking) {
+            BlockPos mossPos = findMossBlock();
+            if (mossPos == null) {
+                mc.player.sendMessage(Text.literal("No moss blocks found in range!"), true);
+                return;
+            }
+
+            // Break any instant-break blocks around the moss first
+            breakInstantBlocks(mossPos);
+
+            targetMossPos = mossPos;
+            isBreaking = true;
+            breakProgress = 0;
+            mc.player.sendMessage(Text.literal("Starting to break moss at: " + mossPos), true);
         }
 
-        // Break any instant-break blocks around the moss first
-        breakInstantBlocks(mossPos);
+        if (targetMossPos != null && isBreaking) {
+            // Continue breaking the block
+            BlockUtils.breakBlock(targetMossPos, true);
+            breakProgress++;
 
-        // Break the moss block
-        BlockUtils.breakBlock(mossPos, true);
-
-        // Add to broken positions
-        brokenPositions.add(mossPos);
-
-        targetMossPos = mossPos;
-        mc.player.sendMessage(Text.literal("Breaking moss at: " + mossPos), true);
+            // Check if block is broken
+            if (mc.world.getBlockState(targetMossPos).getBlock() != Blocks.MOSS_BLOCK) {
+                brokenPositions.add(targetMossPos);
+                isBreaking = false;
+                breakProgress = 0;
+                lastBreakTime = currentTime;
+                mc.player.sendMessage(Text.literal("Finished breaking moss at: " + targetMossPos), true);
+            }
+        }
     }
 
     @EventHandler
