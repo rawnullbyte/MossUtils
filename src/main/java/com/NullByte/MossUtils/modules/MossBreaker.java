@@ -31,16 +31,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.HashSet;
 import java.util.Set;
 
-public class MossGrower extends Module {
+public class MossBreaker extends Module {
     private final SettingGroup sgGeneral = this.settings.getDefaultGroup();
     private final SettingGroup sgRender = this.settings.createGroup("Render");
     private final SettingGroup sgSettings = this.settings.createGroup("Settings");
     private final Random random = new Random();
     private ScheduledExecutorService scheduler;
-    private Set<BlockPos> harvestedPositions = new HashSet<>();
+    private Set<BlockPos> brokenPositions = new HashSet<>();
 
-    private BlockPos lastMossPos;
-    private long lastGrowTime;
+    private BlockPos targetMossPos;
+    private long lastBreakTime;
 
     @Override
     public void onDeactivate() {
@@ -48,57 +48,44 @@ public class MossGrower extends Module {
             scheduler.shutdownNow();
             scheduler = null;
         }
-        harvestedPositions.clear();
+        brokenPositions.clear();
         super.onDeactivate();
     }
 
     @Override
     public void onActivate() {
         super.onActivate();
-        lastMossPos = null;
-        lastGrowTime = 0;
-        harvestedPositions.clear();
+        targetMossPos = null;
+        lastBreakTime = 0;
+        brokenPositions.clear();
 
         scheduler = Executors.newScheduledThreadPool(1);
 
-        double delayValue;
-        if (delay == null) {
-            delayValue = 1.0;
-        } else {
-            try {
-                delayValue = Double.parseDouble(delay.toString());
-            } catch (NumberFormatException e) {
-                delayValue = 1.0;
-            }
-        }
-
-        long initialDelayMillis = Math.max(0, (long) (delayValue * 1000));
-        long periodMillis = Math.max(1, (long) (delayValue * 1000));
-
-        mc.player.sendMessage(Text.literal("Delay is: " + delayValue + " seconds"), true);
+        double delayValue = delay.get();
+        long periodMillis = Math.max(1, (long)(delayValue * 1000));
 
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 if (mc.player != null && mc.world != null) {
-                    growMoss();
+                    breakMoss();
                 }
             } catch (Exception e) {
                 e.printStackTrace();
             }
-        }, initialDelayMillis, periodMillis, TimeUnit.MILLISECONDS);
+        }, 0, periodMillis, TimeUnit.MILLISECONDS);
     }
 
     private final Setting<Double> delay = sgGeneral.add(new DoubleSetting.Builder()
         .name("Delay")
-        .description("Delay between bone meal applications.")
-        .defaultValue(3)
-        .range(0.01d, 15.0d)
+        .description("Delay between breaking moss blocks.")
+        .defaultValue(0.5)
+        .range(0.1, 5.0)
         .build()
     );
 
     private final Setting<Integer> distance_from_player = sgSettings.add(new IntSetting.Builder()
         .name("Distance")
-        .description("How far from player should moss be grown.")
+        .description("How far from player to search for moss.")
         .defaultValue(4)
         .range(1, 6)
         .build()
@@ -106,13 +93,13 @@ public class MossGrower extends Module {
 
     private final Setting<SettingColor> color = sgRender.add(new ColorSetting.Builder()
         .name("Color")
-        .description("The color of the marker.")
-        .defaultValue(Color.GREEN)
+        .description("The color of the target block highlight.")
+        .defaultValue(new SettingColor(255, 0, 0, 100))
         .build()
     );
 
-    public MossGrower() {
-        super(AddonTemplate.CATEGORY, "Moss Grower", "Automatically grows moss blocks using bone meal.");
+    public MossBreaker() {
+        super(AddonTemplate.CATEGORY, "Moss Breaker", "Automatically finds and breaks moss blocks.");
     }
 
     private void breakInstantBlocks(BlockPos pos) {
@@ -129,12 +116,11 @@ public class MossGrower extends Module {
         }
     }
 
-    private BlockPos getFarthestMossBlock() {
+    private BlockPos findMossBlock() {
         if (mc.player == null || mc.world == null) return null;
 
         BlockPos playerPos = mc.player.getBlockPos();
-        List<BlockPos> farthestMossList = new ArrayList<>();
-        double maxDistance = 0;
+        List<BlockPos> mossList = new ArrayList<>();
 
         int range = distance_from_player.get();
         for (int x = -range; x <= range; x++) {
@@ -142,84 +128,50 @@ public class MossGrower extends Module {
                 for (int z = -range; z <= range; z++) {
                     BlockPos pos = playerPos.add(x, y, z);
                     if (mc.world.getBlockState(pos).getBlock() == Blocks.MOSS_BLOCK &&
-                        !harvestedPositions.contains(pos) &&
-                        (mc.world.getBlockState(pos.up()).isAir() ||
-                         mc.world.getBlockState(pos.up()).getBlock() == Blocks.GRASS ||
-                         mc.world.getBlockState(pos.up()).getBlock() == Blocks.TALL_GRASS ||
-                         mc.world.getBlockState(pos.up()).getBlock() == Blocks.AZALEA ||
-                         mc.world.getBlockState(pos.up()).getBlock() == Blocks.FLOWERING_AZALEA)) {
+                        !brokenPositions.contains(pos)) {
                         double distance = pos.getSquaredDistance(playerPos);
                         if (distance <= range * range) {
-                            if (distance > maxDistance) {
-                                maxDistance = distance;
-                                farthestMossList.clear();
-                                farthestMossList.add(pos);
-                            } else if (distance == maxDistance) {
-                                farthestMossList.add(pos);
-                            }
+                            mossList.add(pos);
                         }
                     }
                 }
             }
         }
 
-        if (farthestMossList.isEmpty()) return null;
-        return farthestMossList.get(random.nextInt(farthestMossList.size()));
+        if (mossList.isEmpty()) return null;
+        return mossList.get(random.nextInt(mossList.size()));
     }
 
-    private void growMoss() {
+    private void breakMoss() {
         if (mc.player == null || mc.world == null) return;
 
-        // Add timeout check
         long currentTime = System.currentTimeMillis();
-        if (currentTime - lastGrowTime < delay.get() * 1000) return;
-        lastGrowTime = currentTime;
+        if (currentTime - lastBreakTime < delay.get() * 1000) return;
+        lastBreakTime = currentTime;
 
-        BlockPos mossPos = getFarthestMossBlock();
+        BlockPos mossPos = findMossBlock();
         if (mossPos == null) {
-            mc.player.sendMessage(Text.literal("No accessible moss blocks found in range!"), true);
+            mc.player.sendMessage(Text.literal("No moss blocks found in range!"), true);
             return;
         }
 
         // Break any instant-break blocks around the moss first
         breakInstantBlocks(mossPos);
 
-        // Find bone meal in inventory
-        int boneMealSlot = -1;
-        for (int i = 0; i < mc.player.getInventory().main.size(); i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
-            if (stack.getItem() == Items.BONE_MEAL) {
-                boneMealSlot = i;
-                break;
-            }
-        }
+        // Break the moss block
+        BlockUtils.breakBlock(mossPos, true);
 
-        if (boneMealSlot == -1) {
-            mc.player.sendMessage(Text.literal("No bone meal found in inventory!"), true);
-            return;
-        }
+        // Add to broken positions
+        brokenPositions.add(mossPos);
 
-        // Switch to bone meal
-        int previousSlot = mc.player.getInventory().selectedSlot;
-        mc.player.getInventory().selectedSlot = boneMealSlot;
-
-        // Use bone meal on moss
-        BlockUtils.interact(new BlockHitResult(mossPos.toCenterPos(), Direction.UP, mossPos, false), Hand.MAIN_HAND, true);
-
-        // Switch back to previous slot
-        mc.player.getInventory().selectedSlot = previousSlot;
-
-        // Add position to harvested set
-        harvestedPositions.add(mossPos);
-
-        lastMossPos = mossPos;
-        mc.player.sendMessage(Text.literal("Growing moss at: " + mossPos), true);
+        targetMossPos = mossPos;
+        mc.player.sendMessage(Text.literal("Breaking moss at: " + mossPos), true);
     }
 
     @EventHandler
     private void onRender3d(Render3DEvent event) {
-        if (lastMossPos != null) {
-            Box marker = new Box(lastMossPos);
+        if (targetMossPos != null) {
+            Box marker = new Box(targetMossPos);
             event.renderer.box(marker, color.get(), color.get(), ShapeMode.Both, 0);
         }
     }

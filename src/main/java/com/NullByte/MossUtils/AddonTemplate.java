@@ -2,6 +2,7 @@ package com.NullByte.MossUtils.addon;
 
 import com.NullByte.MossUtils.addon.commands.CommandExample;
 import com.NullByte.MossUtils.addon.modules.MossGrower;
+import com.NullByte.MossUtils.addon.modules.MossBreaker;
 import com.mojang.logging.LogUtils;
 import meteordevelopment.meteorclient.addons.GithubRepo;
 import meteordevelopment.meteorclient.addons.MeteorAddon;
@@ -19,10 +20,11 @@ public class AddonTemplate extends MeteorAddon {
 
     @Override
     public void onInitialize() {
-        LOG.info("Initializing Meteor Addon Template");
+        LOG.info("Initializing Meteor Moss Utils");
 
         // Modules
         Modules.get().add(new MossGrower());
+        Modules.get().add(new MossBreaker());
         // Commands
         //Commands.add(new CommandExample());
 
