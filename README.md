@@ -1,5 +1,7 @@
 # Meteor Addon Template
 
+https://github.com/rawnullbyte/MossUtils/blob/V1.0/src/main/resources/assets/template/icon.png?raw=true
+
 A template to allow easy usage of the Meteor Addon API.
 
 ### How to use
