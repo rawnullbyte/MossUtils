@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "mossutils",
+  "version": "${version}",
+  "name": "Moss Utils",
+  "description": "Moss Utilities.",
+  "authors": [
+    "NullByte"
+  ],
+  "contact": {
+    "repo": "https://github.com/rawnullbyte/MossUtils"
+  },
+  "icon": "assets/template/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "com.NullByte.MossUtils.addon.AddonTemplate"
+    ]
+  },
+  "mixins": [
+    "addon-template.mixins.json"
+  ],
+  "custom": {
+    "meteor-client:color": "225,25,25"
+  },
+  "depends": {
+    "java": ">=21",
+    "minecraft": ["${mc_version}"],
+    "meteor-client": "*"
+  }
+}
